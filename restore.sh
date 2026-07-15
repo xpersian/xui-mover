@@ -8,7 +8,7 @@
 # destructive happens.
 #
 # Usage:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/restore.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/restore.sh)
 #   restore.sh --archive /root/xui-mover-incoming/xui-backup-old-20260715T180400Z.tar.gz
 #
 # Run `restore.sh --help` for the full flag list. Must be run as root on a

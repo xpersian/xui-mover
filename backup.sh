@@ -7,7 +7,7 @@
 # pushes it directly to the target over SSH.
 #
 # Usage:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/backup.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/backup.sh)
 #   backup.sh --push-to root@1.2.3.4
 #
 # Run `backup.sh --help` for the full flag list. Must be run as root on a

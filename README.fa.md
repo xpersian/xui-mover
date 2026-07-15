@@ -20,19 +20,19 @@
 روی سرور **قدیم**:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/backup.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/backup.sh)
 ```
 
 این دستور یک آرشیو (tarball) می‌سازد و مسیر فایل، چک‌سام و یک دستور آماده‌ی `scp` برای کپی کردن آن چاپ می‌کند. یا می‌توانید آرشیو را مستقیماً در همان مرحله به سرور جدید push کنید:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/backup.sh) --push-to root@new-server-ip
+bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/backup.sh) --push-to root@new-server-ip
 ```
 
 روی سرور **جدید**، بعد از این‌که آرشیو به آن‌جا منتقل شد:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/restore.sh) --archive /root/xui-mover-incoming/xui-backup-....tar.gz
+bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/restore.sh) --archive /root/xui-mover-incoming/xui-backup-....tar.gz
 ```
 
 اسکریپت `restore.sh` دقیقاً نشان می‌دهد که چه چیزی قرار است بازنویسی شود و پیش از هرگونه تغییر از شما می‌خواهد عبارت `RESTORE` را تایپ کنید. اگر چیز دیگری تایپ کنید، عملیات بدون هیچ تغییری متوقف می‌شود.

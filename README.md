@@ -20,19 +20,19 @@ The official guidance for moving a 3x-ui panel is "copy `/etc/x-ui/` and `/root/
 On the **old** server:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/backup.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/backup.sh)
 ```
 
 This produces a tarball and prints its path, checksum, and a ready-to-copy `scp` command. Alternatively, push it straight to the new server in one step:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/backup.sh) --push-to root@new-server-ip
+bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/backup.sh) --push-to root@new-server-ip
 ```
 
 On the **new** server, once the archive has landed there:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/restore.sh) --archive /root/xui-mover-incoming/xui-backup-....tar.gz
+bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/restore.sh) --archive /root/xui-mover-incoming/xui-backup-....tar.gz
 ```
 
 `restore.sh` shows you exactly what it's about to overwrite and requires you to type `RESTORE` before touching anything. Type anything else and it aborts with zero changes made.

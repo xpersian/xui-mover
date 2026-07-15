@@ -2,7 +2,7 @@
 # lib/common.sh — REFERENCE / DEVELOPMENT COPY ONLY.
 #
 # backup.sh and restore.sh do NOT source this file at runtime. Both must stay
-# runnable via `bash <(curl -fsSL https://raw.githubusercontent.com/<org>/xui-mover/main/backup.sh)`
+# runnable via `bash <(curl -fsSL https://raw.githubusercontent.com/alionthecode/xui-mover/main/backup.sh)`
 # with no other files present, so the functions below are inlined verbatim
 # into both entry-point scripts between the "BEGIN/END shared helpers"
 # markers. If you change a function here, copy the change into both
