@@ -156,7 +156,7 @@ make_workdir() {
 
 cleanup() {
   if [[ -n "${WORKDIR:-}" && "$WORKDIR" == "$WORK_ROOT"/run-* && -d "$WORKDIR" ]]; then
-    rm -rf "$WORKDIR"
+    rm -rf "$WORKDIR" || true
   fi
 }
 
@@ -555,6 +555,7 @@ parse_flags() {
 main() {
   parse_flags "$@"
   setup_colors
+  setup_logging
 
   step_banner 1 8 "Preflight checks"
   require_root
@@ -565,7 +566,6 @@ main() {
   trap cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  setup_logging
   log_info "Working directory: $WORKDIR"
 
   step_banner 2 8 "Detecting backend"
@@ -640,7 +640,7 @@ main() {
   run_step "tar czf $archive" build_archive "$archive" "$WORKDIR" "$archive_stem" meta.json db cert etc-default-x-ui.reference
   if [[ "$DRY_RUN" -eq 0 ]]; then
     checksum=$(checksum_file "$archive")
-    local size; size=$(du -h "$archive" | cut -f1)
+    local size; size=$(du -h "$archive" 2>/dev/null | cut -f1) || size="?"
     log_success "Archive built: $archive ($size)"
   fi
 

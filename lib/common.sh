@@ -205,7 +205,10 @@ make_workdir() {
 # status is preserved.
 cleanup() {
   if [[ -n "${WORKDIR:-}" && "$WORKDIR" == "$WORK_ROOT"/run-* && -d "$WORKDIR" ]]; then
-    rm -rf "$WORKDIR"
+    # `|| true`: this runs as the EXIT trap under `set -e` — an rm failure
+    # here (busy mount, odd permissions) must never override the script's
+    # real exit code.
+    rm -rf "$WORKDIR" || true
   fi
 }
 

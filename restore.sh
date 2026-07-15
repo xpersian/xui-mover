@@ -147,7 +147,7 @@ make_workdir() {
 
 cleanup() {
   if [[ -n "${WORKDIR:-}" && "$WORKDIR" == "$WORK_ROOT"/run-* && -d "$WORKDIR" ]]; then
-    rm -rf "$WORKDIR"
+    rm -rf "$WORKDIR" || true
   fi
 }
 
@@ -442,6 +442,7 @@ parse_flags() {
 main() {
   parse_flags "$@"
   setup_colors
+  setup_logging
 
   step_banner 1 9 "Preflight checks"
   require_root
@@ -452,7 +453,6 @@ main() {
   trap cleanup EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  setup_logging
   log_info "Working directory: $WORKDIR"
 
   step_banner 2 9 "Reading target configuration"
@@ -530,10 +530,20 @@ main() {
   if [[ "$BACKEND" == "postgres" ]]; then
     run_step "pg_restore from $BUNDLE_DIR/db/x-ui.dump" pg_restore_from_file "$BUNDLE_DIR/db/x-ui.dump"
   else
+    # Capture the pre-existing file's owner/mode (set by x-ui's own install)
+    # before cp overwrites it, and reapply the same values afterward, rather
+    # than guessing a fixed mode — matches whatever this fresh install
+    # actually expects. Falls back to root:root/644 only when there was no
+    # pre-existing file to inherit from.
+    local sqlite_existing_perm="" sqlite_existing_owner=""
+    if [[ -f "$SQLITE_PATH" ]]; then
+      sqlite_existing_perm=$(stat -c '%a' "$SQLITE_PATH" 2>/dev/null) || sqlite_existing_perm=""
+      sqlite_existing_owner=$(stat -c '%U:%G' "$SQLITE_PATH" 2>/dev/null) || sqlite_existing_owner=""
+    fi
     run_step "replace $SQLITE_PATH" cp -f "$BUNDLE_DIR/db/x-ui.db" "$SQLITE_PATH"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-      chown root:root "$SQLITE_PATH" 2>/dev/null || true
-      chmod 644 "$SQLITE_PATH"
+      chown "${sqlite_existing_owner:-root:root}" "$SQLITE_PATH" 2>/dev/null || true
+      chmod "${sqlite_existing_perm:-644}" "$SQLITE_PATH"
       if ! sqlite_integrity_check "$SQLITE_PATH"; then
         die "$EXIT_RESTORE_FAILED" "Restored SQLite database failed PRAGMA integrity_check."
       fi
@@ -550,8 +560,8 @@ main() {
       if ! cp -a "$BUNDLE_DIR/cert/." "$XUI_CERT_DIR/"; then
         die "$EXIT_CERT_RESTORE_FAILED" "Failed to copy certs into $XUI_CERT_DIR."
       fi
-      find "$XUI_CERT_DIR" -iname '*key*' -exec chmod 600 {} \; 2>/dev/null || true
-      find "$XUI_CERT_DIR" \( -iname '*.pem' -o -iname '*.crt' \) ! -iname '*key*' -exec chmod 644 {} \; 2>/dev/null || true
+      find "$XUI_CERT_DIR" -type f -iname '*key*' -exec chmod 600 {} \; 2>/dev/null || true
+      find "$XUI_CERT_DIR" -type f \( -iname '*.pem' -o -iname '*.crt' \) ! -iname '*key*' -exec chmod 644 {} \; 2>/dev/null || true
       log_success "Certs restored to $XUI_CERT_DIR."
     fi
   else
