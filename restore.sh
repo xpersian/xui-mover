@@ -270,12 +270,14 @@ pg_restore_from_file() {
 }
 
 pg_sanity_counts() {
-  local inbounds="" users=""
+  local inbounds="" users="" settings=""
   inbounds=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM inbounds;' 2>"$WORKDIR/pg_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'inbounds' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
   users=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM users;' 2>"$WORKDIR/pg_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'users' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
-  printf '%s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}"
+  settings=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM settings;' 2>"$WORKDIR/pg_sanity.stderr") \
+    || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'settings' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
+  printf '%s %s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}" "${settings//[[:space:]]/}"
 }
 
 sqlite_client_precheck() {
@@ -296,12 +298,14 @@ sqlite_integrity_check() {
 }
 
 sqlite_sanity_counts() {
-  local path="$1" inbounds="" users=""
+  local path="$1" inbounds="" users="" settings=""
   inbounds=$(sqlite3 "$path" 'SELECT count(*) FROM inbounds;' 2>"$WORKDIR/sqlite_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'inbounds' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
   users=$(sqlite3 "$path" 'SELECT count(*) FROM users;' 2>"$WORKDIR/sqlite_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'users' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
-  printf '%s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}"
+  settings=$(sqlite3 "$path" 'SELECT count(*) FROM settings;' 2>"$WORKDIR/sqlite_sanity.stderr") \
+    || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'settings' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
+  printf '%s %s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}" "${settings//[[:space:]]/}"
 }
 
 xui_is_active() {
@@ -396,6 +400,7 @@ SQLITE_PATH=""
 BUNDLE_DIR=""
 SOURCE_INBOUNDS=""
 SOURCE_USERS=""
+SOURCE_SETTINGS=""
 
 usage() {
   cat <<'EOF'
@@ -495,13 +500,14 @@ main() {
   source_xui_version=$(read_meta_json_field "$meta_json" "xui_version")
   SOURCE_INBOUNDS=$(read_meta_json_number "$meta_json" "inbounds")
   SOURCE_USERS=$(read_meta_json_number "$meta_json" "users")
+  SOURCE_SETTINGS=$(read_meta_json_number "$meta_json" "settings")
   if [[ "$archive_backend" != "$BACKEND" ]]; then
     die "$EXIT_BACKEND_MISMATCH" "Archive backend ($archive_backend) does not match this server's configured backend ($BACKEND)." "Re-run restore.sh on a server configured for $archive_backend, or re-run backup.sh against a $BACKEND source."
   fi
   if [[ -n "$source_xui_version" && "$source_xui_version" != "unknown" && "$source_xui_version" != "$target_xui_version" ]]; then
     log_warn "x-ui version mismatch: archive was created on $source_xui_version, this server runs $target_xui_version. Cross-version schema changes are out of scope for this tool — verify manually if unsure."
   fi
-  log_success "Archive OK — backend: $archive_backend, source inbounds: ${SOURCE_INBOUNDS:-?}, source users: ${SOURCE_USERS:-?}"
+  log_success "Archive OK — backend: $archive_backend, source inbounds: ${SOURCE_INBOUNDS:-?}, source users: ${SOURCE_USERS:-?}, source settings rows: ${SOURCE_SETTINGS:-?}"
 
   step_banner 4 9 "Confirm restore"
   local summary_lines=("Backend: $BACKEND")
@@ -573,20 +579,23 @@ main() {
   log_success "x-ui started."
 
   step_banner 9 9 "Sanity check & summary"
-  local inbounds_count="?" users_count="?"
+  local inbounds_count="?" users_count="?" settings_count="?"
   if [[ "$DRY_RUN" -eq 0 ]]; then
     if [[ "$BACKEND" == "postgres" ]]; then
-      read -r inbounds_count users_count <<<"$(pg_sanity_counts)"
+      read -r inbounds_count users_count settings_count <<<"$(pg_sanity_counts)"
     else
-      read -r inbounds_count users_count <<<"$(sqlite_sanity_counts "$SQLITE_PATH")"
+      read -r inbounds_count users_count settings_count <<<"$(sqlite_sanity_counts "$SQLITE_PATH")"
     fi
     if [[ -n "$SOURCE_INBOUNDS" && "$inbounds_count" != "$SOURCE_INBOUNDS" ]]; then
       log_warn "Restored inbounds count ($inbounds_count) differs from the source backup's recorded count ($SOURCE_INBOUNDS) — verify manually."
     fi
+    if [[ -n "$SOURCE_SETTINGS" && "$settings_count" != "$SOURCE_SETTINGS" ]]; then
+      log_warn "Restored settings row count ($settings_count) differs from the source backup's recorded count ($SOURCE_SETTINGS) — panel settings/Xray configuration may not have carried over correctly, verify manually."
+    fi
   fi
   print_summary "Restore complete" \
     "Backend: $BACKEND" \
-    "Inbounds restored: $inbounds_count   Users restored: $users_count" \
+    "Inbounds restored: $inbounds_count   Users restored: $users_count   Settings rows restored: $settings_count" \
     "x-ui service: active" \
     "" \
     "Next: log into your panel and confirm your inbounds/clients are present."

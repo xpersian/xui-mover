@@ -273,12 +273,14 @@ pg_dump_to_file() {
 }
 
 pg_sanity_counts() {
-  local inbounds="" users=""
+  local inbounds="" users="" settings=""
   inbounds=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM inbounds;' 2>"$WORKDIR/pg_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'inbounds' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
   users=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM users;' 2>"$WORKDIR/pg_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'users' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
-  printf '%s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}"
+  settings=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM settings;' 2>"$WORKDIR/pg_sanity.stderr") \
+    || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'settings' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
+  printf '%s %s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}" "${settings//[[:space:]]/}"
 }
 
 sqlite_client_precheck() {
@@ -293,12 +295,14 @@ resolve_sqlite_path() {
 }
 
 sqlite_sanity_counts() {
-  local path="$1" inbounds="" users=""
+  local path="$1" inbounds="" users="" settings=""
   inbounds=$(sqlite3 "$path" 'SELECT count(*) FROM inbounds;' 2>"$WORKDIR/sqlite_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'inbounds' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
   users=$(sqlite3 "$path" 'SELECT count(*) FROM users;' 2>"$WORKDIR/sqlite_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'users' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
-  printf '%s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}"
+  settings=$(sqlite3 "$path" 'SELECT count(*) FROM settings;' 2>"$WORKDIR/sqlite_sanity.stderr") \
+    || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'settings' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
+  printf '%s %s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}" "${settings//[[:space:]]/}"
 }
 
 xui_is_active() {
@@ -388,7 +392,7 @@ checksum_file() {
 }
 
 write_meta_json() {
-  local out_file="$1" hostname_v="$2" backend_v="$3" xui_version_v="$4" inbounds_v="$5" users_v="$6" nodes_v="$7"
+  local out_file="$1" hostname_v="$2" backend_v="$3" xui_version_v="$4" inbounds_v="$5" users_v="$6" settings_v="$7" nodes_v="$8"
   cat > "$out_file" <<EOF
 {
   "tool_version": "${TOOL_VERSION}",
@@ -396,7 +400,7 @@ write_meta_json() {
   "hostname": "${hostname_v}",
   "backend": "${backend_v}",
   "xui_version": "${xui_version_v}",
-  "source_counts": {"inbounds": ${inbounds_v}, "users": ${users_v}, "nodes": ${nodes_v}}
+  "source_counts": {"inbounds": ${inbounds_v}, "users": ${users_v}, "settings": ${settings_v}, "nodes": ${nodes_v}}
 }
 EOF
 }
@@ -596,11 +600,11 @@ main() {
 
   step_banner 4 8 "Dumping database"
   mkdir -p "$WORKDIR/db"
-  local inbounds_count=0 users_count=0
+  local inbounds_count=0 users_count=0 settings_count=0
   if [[ "$BACKEND" == "postgres" ]]; then
     run_step "pg_dump -Fc to $WORKDIR/db/x-ui.dump" pg_dump_to_file "$WORKDIR/db/x-ui.dump"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-      read -r inbounds_count users_count <<<"$(pg_sanity_counts)"
+      read -r inbounds_count users_count settings_count <<<"$(pg_sanity_counts)"
     fi
   else
     local was_active=1
@@ -611,10 +615,10 @@ main() {
       run_step "restart x-ui" xui_start_and_wait
     fi
     if [[ "$DRY_RUN" -eq 0 ]]; then
-      read -r inbounds_count users_count <<<"$(sqlite_sanity_counts "$WORKDIR/db/x-ui.db")"
+      read -r inbounds_count users_count settings_count <<<"$(sqlite_sanity_counts "$WORKDIR/db/x-ui.db")"
     fi
   fi
-  log_success "Dump complete (inbounds: ${inbounds_count:-0}, users: ${users_count:-0})"
+  log_success "Dump complete (inbounds: ${inbounds_count:-0}, users: ${users_count:-0}, settings rows: ${settings_count:-0})"
 
   step_banner 5 8 "Collecting certs and reference config"
   if [[ -d "$XUI_CERT_DIR" ]]; then
@@ -628,7 +632,7 @@ main() {
     printf '# Do NOT apply this file verbatim on the target: XUI_DB_DSN is server-specific.\n#\n'
     cat "$env_file"
   } > "$WORKDIR/etc-default-x-ui.reference"
-  write_meta_json "$WORKDIR/meta.json" "$(hostname)" "$BACKEND" "$xui_version" "${inbounds_count:-0}" "${users_count:-0}" "${node_count:-0}"
+  write_meta_json "$WORKDIR/meta.json" "$(hostname)" "$BACKEND" "$xui_version" "${inbounds_count:-0}" "${users_count:-0}" "${settings_count:-0}" "${node_count:-0}"
   log_success "Collected certs and metadata."
 
   step_banner 6 8 "Building archive"
@@ -670,7 +674,7 @@ main() {
   fi
   print_summary "Backup complete" \
     "Backend: $BACKEND (x-ui $xui_version)" \
-    "Inbounds: ${inbounds_count:-0}   Users: ${users_count:-0}   Nodes: ${node_count:-0}" \
+    "Inbounds: ${inbounds_count:-0}   Users: ${users_count:-0}   Settings rows: ${settings_count:-0}   Nodes: ${node_count:-0}" \
     "$dest_line" \
     "SHA256: ${checksum:-<dry-run>}" \
     "" \

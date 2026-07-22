@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `backup.sh`/`restore.sh`: row-count sanity check now also covers the `settings` table (alongside `inbounds`/`users`), recorded in `meta.json`'s `source_counts` and compared post-restore with a warning on mismatch. The `settings` table holds the panel's global settings *and* the Xray Configuration template (outbounds/routing/DNS), so this gives an immediate signal that the table came across intact, distinguishing a genuine restore gap from x-ui itself failing to render already-migrated data.
+
 ## [1.0.0] - 2026-07-15
 
 ### Added

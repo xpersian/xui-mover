@@ -367,15 +367,22 @@ pg_restore_from_file() {
   fi
 }
 
-# pg_sanity_counts — prints "INBOUNDS_COUNT USERS_COUNT". Dies only on a
-# genuine query error, not on a legitimate zero count.
+# pg_sanity_counts — prints "INBOUNDS_COUNT USERS_COUNT SETTINGS_COUNT". Dies
+# only on a genuine query error, not on a legitimate zero count. The
+# settings-table count exists because that single table holds the panel's
+# global settings *and* the Xray Configuration template (outbounds/routing/
+# DNS, stored as one JSON blob under key "xrayTemplateConfig") — comparing
+# its row count pre/post restore catches "the settings table itself didn't
+# come across" without needing to parse the JSON.
 pg_sanity_counts() {
-  local inbounds="" users=""
+  local inbounds="" users="" settings=""
   inbounds=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM inbounds;' 2>"$WORKDIR/pg_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'inbounds' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
   users=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM users;' 2>"$WORKDIR/pg_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'users' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
-  printf '%s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}"
+  settings=$(PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_CONN_NOAUTH" -tAc 'SELECT count(*) FROM settings;' 2>"$WORKDIR/pg_sanity.stderr") \
+    || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'settings' failed." "$(cat "$WORKDIR/pg_sanity.stderr" 2>/dev/null)"
+  printf '%s %s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}" "${settings//[[:space:]]/}"
 }
 
 # ============================================================================
@@ -402,12 +409,14 @@ sqlite_integrity_check() {
 }
 
 sqlite_sanity_counts() {
-  local path="$1" inbounds="" users=""
+  local path="$1" inbounds="" users="" settings=""
   inbounds=$(sqlite3 "$path" 'SELECT count(*) FROM inbounds;' 2>"$WORKDIR/sqlite_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'inbounds' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
   users=$(sqlite3 "$path" 'SELECT count(*) FROM users;' 2>"$WORKDIR/sqlite_sanity.stderr") \
     || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'users' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
-  printf '%s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}"
+  settings=$(sqlite3 "$path" 'SELECT count(*) FROM settings;' 2>"$WORKDIR/sqlite_sanity.stderr") \
+    || die "$EXIT_SANITY_CHECK_FAILED" "Sanity-check query on 'settings' failed." "$(cat "$WORKDIR/sqlite_sanity.stderr" 2>/dev/null)"
+  printf '%s %s %s' "${inbounds//[[:space:]]/}" "${users//[[:space:]]/}" "${settings//[[:space:]]/}"
 }
 
 # ============================================================================
@@ -549,7 +558,7 @@ extract_archive() {
 # we fully control meta.json's format (single-level, plus one nested object)
 # and the PRD never requires jq.
 write_meta_json() {
-  local out_file="$1" hostname_v="$2" backend_v="$3" xui_version_v="$4" inbounds_v="$5" users_v="$6" nodes_v="$7"
+  local out_file="$1" hostname_v="$2" backend_v="$3" xui_version_v="$4" inbounds_v="$5" users_v="$6" settings_v="$7" nodes_v="$8"
   cat > "$out_file" <<EOF
 {
   "tool_version": "${TOOL_VERSION}",
@@ -557,7 +566,7 @@ write_meta_json() {
   "hostname": "${hostname_v}",
   "backend": "${backend_v}",
   "xui_version": "${xui_version_v}",
-  "source_counts": {"inbounds": ${inbounds_v}, "users": ${users_v}, "nodes": ${nodes_v}}
+  "source_counts": {"inbounds": ${inbounds_v}, "users": ${users_v}, "settings": ${settings_v}, "nodes": ${nodes_v}}
 }
 EOF
 }
